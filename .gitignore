@@ -1,0 +1,24 @@
+# checkpoints、数据、日志不进仓库
+*.pt
+*.pth
+*.safetensors
+*.ckpt
+*.bin
+*.parquet
+*.jsonl
+checkpoints/
+data/
+logs/
+wandb/
+tensorboard/
+slurm-*.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 本机
+.DS_Store
+.claude/
