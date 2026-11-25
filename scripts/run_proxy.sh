@@ -93,6 +93,12 @@ if [[ $PRECISION == fp8 ]]; then
   optimizer_args+=(--fp8-format e4m3 --fp8-recipe blockwise)
 fi
 
+# The fused gradient accumulation for the output layer needs NVIDIA Apex's CUDA
+# extension, which is not built in our environment yet. Set APEX=1 once it is.
+if [[ ${APEX:-0} != 1 ]]; then
+  optimizer_args+=(--no-gradient-accumulation-fusion)
+fi
+
 data_args=(
   --train-data-path "$TRAIN_DATA_PATH"
   --valid-data-path "$VALID_DATA_PATH"
@@ -131,7 +137,7 @@ runtime_args=(
   --diag-interval 100
 )
 
-exec torchrun --nproc-per-node "$NGPU" "$repo_root/pretrain_gpt.py" \
+exec python -m torch.distributed.run --nproc-per-node "$NGPU" "$repo_root/pretrain_gpt.py" \
   "${model_args[@]}" \
   "${optimizer_args[@]}" \
   "${data_args[@]}" \
