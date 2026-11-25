@@ -26,7 +26,7 @@
 
 - 虚拟环境 `~/venvs/puro`，复用课程共享的 Python 3.12 + PyTorch 2.14 (CUDA 13)。用 `source ~/venvs/puro/env.sh` 激活。
 - 已装：Puro-Megatron（可编辑安装）、Transformer Engine 2.12.0（仓库锁定的版本，PyTorch 扩展从源码编译）、Emerging-Optimizers v0.2.0（MuonH）。
-- CPU 上导入测试全部通过。**GPU 上还没跑过。**
+- CPU 和 GPU（H100）上导入测试全部通过。
 - 踩过的坑：
   - 计算节点没有外网，所有安装只能在登录节点做。
   - 登录节点没有 CUDA 工具链。用 pip 的 `nvidia-cuda-nvcc`、`nvidia-cuda-crt`、`nvidia-cuda-cccl` 加共享环境里的头文件，拼出 `~/venvs/puro/cuda_home` 才编过 Transformer Engine。
@@ -43,7 +43,25 @@
 **训练脚本**
 
 - [scripts/run_proxy.sh](../scripts/run_proxy.sh)：照 Puro-2B 的 phase1 配方缩小，模型大小、batch、精度、GPU 数用环境变量控制。
-- [scripts/smoke.sbatch](../scripts/smoke.sbatch)：导入测试，然后一个极小模型分别用 BF16 和 FP8 跑 30 步。已提交，排队中。
+- [scripts/smoke.sbatch](../scripts/smoke.sbatch)：导入测试，然后一个极小模型分别用 BF16 和 FP8 跑 30 步。
+- [scripts/env.sh](../scripts/env.sh)：集群上环境脚本的副本。
+
+**冒烟测试结果（1 张 H100，8 层、hidden 512，batch 8，序列长 4096，30 步）**
+
+| 精度 | 训练 loss（第 1 步 → 第 30 步） | 验证 loss | 每步耗时 | 吞吐 |
+|---|---|---|---|---|
+| BF16 | 12.01 → 6.75 | 6.94 | 约 183 ms | 约 128 TFLOP/s |
+| FP8 blockwise | 12.01 → 6.74 | 6.94 | 约 214 ms | 约 110 TFLOP/s |
+
+- 训练代码、MuonH、我们自己打包的数据，端到端跑通。
+- **FP8 blockwise 配方能在 H100 上跑**，但在这个极小模型上比 BF16 慢约 17%。H100 上的代理实验先用 BF16。
+- 只有 30 步、一个极小模型，这些数字只说明流程通了，不代表基线质量。
+
+**跑通前修的三个问题**
+
+- 虚拟环境里没有 `torchrun`，改用 `python -m torch.distributed.run`。
+- 输出层的梯度累加融合需要 Apex 的 CUDA 扩展，我们没装，用 `--no-gradient-accumulation-fusion` 关掉。作者的环境装了 Apex，这是一处与原配方的差异（影响速度和显存，不影响数值）。
+- 计算节点系统里有 CUDA 12 运行库，Transformer Engine 发现 `libcudart.so.12` 和 `.13` 都能加载就拒绝运行。在库搜索路径最前面放一个同名空文件，让系统那份加载不了。
 
 **Proposal**
 
@@ -52,5 +70,5 @@
 
 **下一步**
 
-- 看冒烟测试结果，特别是 FP8 blockwise 能否在 H100 上跑。
 - 把 4 个 Parquet 全量转换，跑 E0 基线。
+- 定 E0 的具体规模和 token 数（取决于再下多少数据）。
