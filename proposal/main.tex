@@ -100,8 +100,6 @@ runs with random mixtures. Cheap, and independent of the architecture.
   }
   \draw[->] (r.south) -- (e1.north);
   \draw[->] (r.south) -- (e4.north);
-  \node[text=muted] at (0,-1.1)
-    {expert width 1536 \,·\, active 3072 \,·\, total 12288};
 \end{tikzpicture}
 
 \smallskip
@@ -143,8 +141,8 @@ In parallel: time the MoE layer on one RTX~5090.
 \medskip
 \head{Status}
 Puro's training stack runs on the course H100 cluster on a shard of Puro's
-data that we tokenized ourselves. A 30-step smoke run of a tiny model trains
-end to end in both BF16 and FP8 (loss $12.0 \to 6.7$). E0 is next.
+data that we tokenized ourselves. A short smoke run of a tiny model trains
+end to end. E0 is next.
 \end{column}
 \begin{column}{0.385\textwidth}
 \head{Expected results}
