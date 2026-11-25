@@ -66,7 +66,8 @@
 **Proposal**
 
 - 3 页 Beamer 初稿在 [proposal/main.tex](../proposal/main.tex)，关键数字已对照论文原文核对。
-- 待办：填队员姓名；放进 Overleaf。
+- 已写进 Overleaf 项目的 `main.tex` 并在网页版编译通过（3 页）。该实例没有 Git 同步，之后改动以本仓库的 `proposal/main.tex` 为准，再同步过去。
+- 待办：填队员姓名。
 
 **下一步**
 
