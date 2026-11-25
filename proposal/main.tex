@@ -1,0 +1,170 @@
+\documentclass[aspectratio=169,10pt]{beamer}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta}
+
+\usetheme{default}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{itemize items}[circle]
+\definecolor{accent}{RGB}{0,90,160}
+\definecolor{muted}{RGB}{95,95,95}
+\setbeamercolor{frametitle}{fg=accent}
+\setbeamercolor{structure}{fg=accent}
+\setbeamerfont{frametitle}{series=\bfseries,size=\large}
+\newcommand{\hl}[1]{\textcolor{accent}{\textbf{#1}}}
+\newcommand{\head}[1]{\textbf{#1}\par\smallskip}
+
+% TODO: fill in the three team members' names.
+\newcommand{\team}{[Name 1], [Name 2], [Name 3]}
+
+\begin{document}
+
+% ---------------------------------------------------------------- slide 1
+\begin{frame}{Improving the Compute Efficiency of Puro-2B}
+{\small\color{muted} Project proposal \,·\, Speedrun Topic 1 \,·\, \team}
+\medskip
+
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.56\textwidth}
+\head{Motivation}
+Puro-2B trains a Qwen2-1.5B-level model from scratch on RTX~5090 GPUs for
+about \$6.9K. Every further saving makes LLM pretraining research more
+accessible to small labs.
+
+\medskip
+\head{Problem}
+Reach the same downstream quality with \hl{30\% less compute}.
+
+\medskip
+{\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+ & Puro-2B & Our target \\
+\midrule
+Avg.\ score, 15 benchmarks & 57.81 & $\ge 57.81$ \\
+RTX 5090 GPU-hours & 22{,}514 & $\le 15{,}760$ \\
+\bottomrule
+\end{tabular}}
+\end{column}
+\begin{column}{0.40\textwidth}
+\head{Key observation}
+Puro-2B sees 1.4T tokens with 2B parameters: about
+\hl{700 tokens per parameter}.
+
+\medskip
+The paper itself calls this an overtrained, data-rich regime. The model is
+limited by its \emph{capacity}, not by data.
+
+\medskip
+$\Rightarrow$ Spend fewer FLOPs on each token, and give the model more
+capacity to absorb the data.
+\end{column}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- slide 2
+\begin{frame}[t]{Method: sparse capacity (MoE) at lower cost per token}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.51\textwidth}
+\head{Main idea: replace each MLP with a mixture of experts}
+\begin{itemize}\setlength{\itemsep}{2pt}
+\item MLPs are $\approx 60\%$ of Puro-2B's FLOPs per token
+      {\small\color{muted}(our estimate)}.
+\item 8 experts, each $\tfrac14$ of the dense MLP width; every token uses
+      its top-2.
+\item Active MLP width halves $\Rightarrow$ \hl{$\approx 30\%$ fewer FLOPs
+      per token}; total MLP capacity doubles.
+\item Everything else unchanged: 1.4T tokens, MuonH, FP8, curriculum.
+\end{itemize}
+
+\smallskip
+\head{Second lever: data mixture}
+Re-weight Puro's data sources with RegMix: fit a regression on many short
+runs with random mixtures. Cheap, and independent of the architecture.
+\end{column}
+\begin{column}{0.45\textwidth}
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, minimum height=5mm, inner sep=2pt},
+  on/.style={box, fill=accent!75, text=white},
+  off/.style={box, fill=black!8, text=black!55},
+  >={Stealth[length=1.6mm]}]
+  \node[font=\scriptsize\bfseries] at (0,2.05) {Dense (Puro-2B)};
+  \node[on, minimum width=28mm] at (0,1.55) {MLP, width 6144};
+  \node[font=\scriptsize\bfseries] at (0,0.8) {MoE (ours)};
+  \node[box, minimum width=28mm] (r) at (0,0.3) {router: top-2 of 8};
+  \foreach \i/\s in {1/on,2/off,3/off,4/on,5/off,6/off,7/off,8/off}{
+    \node[\s, minimum width=5.6mm] (e\i) at ({-2.975+0.66*\i},-0.6) {\i};
+  }
+  \draw[->] (r.south) -- (e1.north);
+  \draw[->] (r.south) -- (e4.north);
+  \node[text=muted] at (0,-1.1)
+    {expert width 1536 \,·\, active 3072 \,·\, total 12288};
+\end{tikzpicture}
+
+\smallskip
+\raggedright
+\head{How we measure}
+{\small
+\begin{enumerate}\setlength{\itemsep}{1pt}
+\item Proxy models on H100: validation loss at equal tokens
+      ($\ge 200$ tokens per parameter).
+\item Throughput of each design on RTX 5090.
+\item Metric: \hl{5090 GPU-hours to reach the dense baseline's loss}.
+\end{enumerate}}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------- slide 3
+\begin{frame}[t]{First experiment and expected results}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.58\textwidth}
+\head{First experiment (proxy scale, H100)}
+{\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & \textbf{E0: dense baseline} & \textbf{E1: MoE} \\
+\midrule
+Layers / hidden & 12 / 768 & 12 / 768 \\
+MLP & width 2304 & 8 experts $\times$ 576, top-2 \\
+Active MLP width & 2304 & 1152 \\
+Data, optimizer & \multicolumn{2}{l}{same Puro data, same MuonH recipe} \\
+Training tokens & \multicolumn{2}{l}{equal, $\ge 200$ per parameter} \\
+\bottomrule
+\end{tabular}}
+
+\smallskip
+\textbf{Question:} does E1 match E0's validation loss?\\
+In parallel: time the MoE layer on one RTX~5090.
+
+\medskip
+\head{Status}
+Puro's training stack is installed on the course H100 cluster, and a shard
+of Puro's data is tokenized into its training format. A first smoke run is
+queued; E0 is next.
+\end{column}
+\begin{column}{0.385\textwidth}
+\head{Expected results}
+\begin{itemize}\setlength{\itemsep}{2pt}
+\item E1 matches E0: MoE keeps quality with half the active MLP.
+\item The trend holds at larger proxies (0.6B, 1.7B).
+\item Net saving \hl{$\ge 30\%$ GPU-hours} on RTX 5090 after measured
+      throughput; the data mixture adds margin.
+\end{itemize}
+
+\smallskip
+\head{Main risks}
+{\small
+\begin{itemize}\setlength{\itemsep}{1pt}
+\item Small experts may run slower on 5090.
+\item More parameters must fit in 32\,GB.
+\item Proxies may not transfer to 2B.
+\end{itemize}}
+\end{column}
+\end{columns}
+\end{frame}
+
+\end{document}

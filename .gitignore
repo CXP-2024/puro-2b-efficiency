@@ -22,3 +22,6 @@ venv/
 # 本机
 .DS_Store
 .claude/
+
+# LaTeX build output
+proposal/build/
