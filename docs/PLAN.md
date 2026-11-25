@@ -64,7 +64,9 @@ MoE 的收益依赖“容量受限”这个前提，所以代理实验必须在�
 **E0（基线复现）**：用 Puro-Megatron 在 H100 上训一个 0.17B 的 dense 模型（MuonH，BF16），
 得到 loss–FLOPs 曲线。这是之后所有对比的参照，也是 proposal 的 preliminary result。
 
-**E1（MoE 对比）**：与 E0 相同的每 token FLOPs，把 MLP 换成 MoE，比较验证 loss。
+**E1（MoE 对比）**：把 E0 的每个 MLP 换成 8 个专家（每个宽度为原 MLP 的 1/4），每个 token 走 top-2。
+激活的 MLP 宽度减半，总容量翻倍。在相同训练 token 数下比较验证 loss。
+放到 2B 规模，这对应每 token 约少 30% 的 FLOPs（MLP 约占 60%，按公开配置估算）。
 同时在单张 5090 上测 MoE 层的吞吐。
 
 **E2（数据配比）**：在 E0 的配置上，对数据源配比做随机采样的短程训练，拟合 RegMix 回归。
