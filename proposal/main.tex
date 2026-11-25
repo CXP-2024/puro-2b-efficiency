@@ -66,24 +66,26 @@ capacity to absorb the data.
 % ---------------------------------------------------------------- slide 2
 \begin{frame}[t]{Method: sparse capacity (MoE) at lower cost per token}
 \begin{columns}[T,onlytextwidth]
-\begin{column}{0.51\textwidth}
+\begin{column}{0.52\textwidth}
 \head{Main idea: replace each MLP with a mixture of experts}
 \begin{itemize}\setlength{\itemsep}{2pt}
 \item MLPs are $\approx 60\%$ of Puro-2B's FLOPs per token
       {\small\color{muted}(our estimate)}.
-\item 8 experts, each $\tfrac14$ of the dense MLP width; every token uses
-      its top-2.
-\item Active MLP width halves $\Rightarrow$ \hl{$\approx 30\%$ fewer FLOPs
-      per token}; total MLP capacity doubles.
-\item Everything else unchanged: 1.4T tokens, MuonH, FP8, curriculum.
+\item 16 experts, each $\tfrac18$ of the MLP width ($2\times$ capacity);
+      every token uses its top-$k$.
+\item $k = 4,\,3,\,2$ $\Rightarrow$ \hl{$\approx 30\%,\ 38\%,\ 45\%$ fewer
+      FLOPs per token}.
+\item Margin: at $k=2$ we save $\ge 30\%$ GPU-hours even if MoE layers
+      run at half the dense throughput.
 \end{itemize}
 
 \smallskip
-\head{Second lever: data mixture}
-Re-weight Puro's data sources with RegMix: fit a regression on many short
-runs with random mixtures. Cheap, and independent of the architecture.
+\head{Fallback: fewer tokens, better data mixture}
+{\small Halving Phase-2 tokens costs only $\approx 0.45$ points in the
+paper. A 30\% cut made this way needs $\approx 0.3$--$0.5$ points back,
+which we seek by re-weighting data sources (RegMix).}
 \end{column}
-\begin{column}{0.45\textwidth}
+\begin{column}{0.44\textwidth}
 \centering
 \begin{tikzpicture}[
   font=\scriptsize,
@@ -92,12 +94,13 @@ runs with random mixtures. Cheap, and independent of the architecture.
   off/.style={box, fill=black!8, text=black!55},
   >={Stealth[length=1.6mm]}]
   \node[font=\scriptsize\bfseries] at (0,2.05) {Dense (Puro-2B)};
-  \node[on, minimum width=28mm] at (0,1.55) {MLP, width 6144};
+  \node[on, minimum width=28mm] at (0,1.55) {one wide MLP};
   \node[font=\scriptsize\bfseries] at (0,0.8) {MoE (ours)};
-  \node[box, minimum width=28mm] (r) at (0,0.3) {router: top-2 of 8};
-  \foreach \i/\s in {1/on,2/off,3/off,4/on,5/off,6/off,7/off,8/off}{
-    \node[\s, minimum width=5.6mm] (e\i) at ({-2.975+0.66*\i},-0.6) {\i};
+  \node[box, minimum width=28mm] (r) at (0,0.3) {router: top-$k$ of 16};
+  \foreach \i/\s/\l in {1/on/1,2/off/2,3/off/3,4/on/4,5/off/5,6/off/6,7/off/7,9/off/16}{
+    \node[\s, minimum width=5.6mm] (e\i) at ({-3.3+0.66*\i},-0.6) {\l};
   }
+  \node[text=black!55] at ({-3.3+0.66*8},-0.6) {$\cdots$};
   \draw[->] (r.south) -- (e1.north);
   \draw[->] (r.south) -- (e4.north);
 \end{tikzpicture}
@@ -107,9 +110,9 @@ runs with random mixtures. Cheap, and independent of the architecture.
 \head{How we measure}
 {\small
 \begin{enumerate}\setlength{\itemsep}{1pt}
+\item Throughput: MoE layer vs.\ dense MLP.
 \item Proxy models on H100: validation loss at equal tokens
       ($\ge 200$ tokens per parameter).
-\item Throughput of each design on RTX 5090.
 \item Metric: \hl{5090 GPU-hours to reach the dense baseline's loss}.
 \end{enumerate}}
 \end{column}
@@ -117,47 +120,51 @@ runs with random mixtures. Cheap, and independent of the architecture.
 \end{frame}
 
 % ---------------------------------------------------------------- slide 3
-\begin{frame}[t]{First experiment and expected results}
+\begin{frame}[t]{First experiments and expected results}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.58\textwidth}
-\head{First experiment (proxy scale, H100)}
+\head{Step 1: throughput test (no training)}
+Time the MoE layer against the dense MLP at Puro-2B's sizes for
+$k = 2, 3, 4$; on H100 now, on RTX~5090 once we have access.
+
+\medskip
+\head{Step 2: quality at proxy scale (H100)}
 {\footnotesize\setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lll@{}}
 \toprule
  & \textbf{E0: dense baseline} & \textbf{E1: MoE} \\
 \midrule
 Layers / hidden & 12 / 768 & 12 / 768 \\
-MLP & width 2304 & 8 experts $\times$ 576, top-2 \\
-Active MLP width & 2304 & 1152 \\
+MLP & width 2304 & 16 experts $\times$ 288, top-$k$ \\
+Active MLP width & 2304 & 576 / 864 / 1152 \\
 Data, optimizer & \multicolumn{2}{l}{same Puro data, same MuonH recipe} \\
 Training tokens & \multicolumn{2}{l}{equal, $\ge 200$ per parameter} \\
 \bottomrule
 \end{tabular}}
 
 \smallskip
-\textbf{Question:} does E1 match E0's validation loss?\\
-In parallel: time the MoE layer on one RTX~5090.
+\textbf{Question:} what is the smallest $k$ that matches E0's validation
+loss?
 
 \medskip
-\head{Status}
-Puro's training stack runs on the course H100 cluster on a shard of Puro's
-data that we tokenized ourselves. A short smoke run of a tiny model trains
-end to end. E0 is next.
+{\small\textbf{Status:} Puro's training stack runs on the course H100
+cluster on Puro data that we tokenized ourselves.}
 \end{column}
 \begin{column}{0.385\textwidth}
 \head{Expected results}
 \begin{itemize}\setlength{\itemsep}{2pt}
-\item E1 matches E0: MoE keeps quality with half the active MLP.
-\item The trend holds at larger proxies (0.6B, 1.7B).
-\item Net saving \hl{$\ge 30\%$ GPU-hours} on RTX 5090 after measured
-      throughput; the data mixture adds margin.
+\item $k = 2$ or $3$ matches E0, also at larger proxies (0.6B, 1.7B).
+\item \hl{$\ge 30\%$ fewer GPU-hours} at equal loss. This needs MoE layers
+      at $\ge 50\%$ of dense speed for $k=2$, or $\ge 75\%$ for $k=3$.
+\item If MoE falls short, we fall back on fewer tokens plus a better data
+      mixture.
 \end{itemize}
 
 \smallskip
 \head{Main risks}
 {\small
 \begin{itemize}\setlength{\itemsep}{1pt}
-\item Small experts may run slower on 5090.
+\item Experts may be too slow on 5090.
 \item More parameters must fit in 32\,GB.
 \item Proxies may not transfer to 2B.
 \end{itemize}}

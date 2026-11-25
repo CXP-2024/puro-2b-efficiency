@@ -67,6 +67,7 @@
 
 - 3 页 Beamer 初稿在 [proposal/main.tex](../proposal/main.tex)，关键数字已对照论文原文核对。
 - 已写进 Overleaf 项目的 `main.tex` 并在网页版编译通过（3 页）。该实例没有 Git 同步，之后改动以本仓库的 `proposal/main.tex` 为准，再同步过去。
+- 讨论 MoE 可行性后修订：设计改为 16 个专家、top-k 可调以留出余量；吞吐测试提到第一步；数据配比从副线改为保底方案。理由见 [PLAN.md](PLAN.md) 第 3 节。
 - 待办：填队员姓名。
 
 **下一步**
